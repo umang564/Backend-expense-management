@@ -14,10 +14,19 @@ func Routes(router *gin.Engine) {
 		userGroup.GET("/getuser", handler.Getuser)
 		userGroup.POST("/creategroup",handler.Creategroup)
 		userGroup.GET("/getgroupname",handler.GetGroupName)
+		
+		userGroup.POST("/addmember", handler.AddMember)
+		userGroup.GET("/viewmember",handler.ViewMember)
+		userGroup.POST("addmoney",handler.AddMoney)
+		userGroup.GET("/exchange",handler.Exchange)
+
+
+
+
 		userGroup.GET("/validate", middleware.RequiredAuth, handler.Validate)
 	}
 
-	
+
 
 	authGroup:=router.Group("/auth")
 {

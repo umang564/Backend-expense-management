@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"app.com/db"
@@ -123,80 +125,73 @@ func Validate(c *gin.Context) {
 
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 func Creategroup(c *gin.Context) {
-    // Retrieve the user from the context
-    user, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
-        return
-    }
+	// Retrieve the user from the context
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
 
-    // Assert the user to the User model
-    userModel, ok := user.(models.User)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
-        return
-    }
+	// Assert the user to the User model
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
 
-    // Bind the incoming JSON to the Group model
-    var group models.Group
-    if err := c.ShouldBindJSON(&group); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"message": "could not parse the data"})
-        return
-    }
+	// Bind the incoming JSON to the Group model
+	var group models.Group
+	if err := c.ShouldBindJSON(&group); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not parse the data"})
+		return
+	}
 
-    // Start a transaction
-    tx := db.Db.Begin()
-    if tx.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "could not start transaction"})
-        return
-    }
+	// Start a transaction
+	tx := db.Db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "could not start transaction"})
+		return
+	}
 
-    // Set the AdminID of the group to the user's ID
-    group.AdminID = userModel.ID
+	// Set the AdminID of the group to the user's ID
+	group.AdminID = userModel.ID
 
-    // Create the group in the database
-    if err := tx.Create(&group).Error; err != nil {
-        tx.Rollback() // Rollback the transaction in case of an error
-        c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
-        return
-    }
+	// Create the group in the database
+	if err := tx.Create(&group).Error; err != nil {
+		tx.Rollback() // Rollback the transaction in case of an error
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
+		return
+	}
 
-    // Insert the member into the MemberGroup table
-    memberGroup := models.MemberGroup{
-        MemberId: userModel.ID,
-        GroupId:  group.ID,
-    }
-    if err := tx.Create(&memberGroup).Error; err != nil {
-        tx.Rollback() // Rollback the transaction in case of an error
-        c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
-        return
-    }
+	// Insert the member into the MemberGroup table
+	memberGroup := models.MemberGroup{
+		MemberId: userModel.ID,
+		GroupId:  group.ID,
+	}
+	if err := tx.Create(&memberGroup).Error; err != nil {
+		tx.Rollback() // Rollback the transaction in case of an error
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
+		return
+	}
 
-    // Commit the transaction
-    if err := tx.Commit().Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "could not commit transaction"})
-        return
-    }
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "could not commit transaction"})
+		return
+	}
 
-    // Respond with a success message
-    c.JSON(http.StatusCreated, gin.H{
-        "message":  "Successfully created group",
-        "group_ID": group.ID,
-    })
+	// Respond with a success message
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Successfully created group",
+		"group_ID": group.ID,
+	})
 }
+
+
+
+
+
 
 
 
@@ -252,4 +247,313 @@ func GetGroupName(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"group_users": groups})
+}
+
+
+
+func ViewMember(c *gin.Context) {
+	
+	GroupId := c.Query("id")
+
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+	
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+
+	var groupUsers []models.MemberGroup
+	result := db.Db.Where("group_id = ?", groupID).Find(&groupUsers)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Error querying database",
+			"error":   result.Error.Error(),
+		})
+		return
+	}
+
+
+	var users []models.Response_user
+	for _, member := range groupUsers {
+		var user models.User
+		result := db.Db.Where("id = ?", member.MemberId).Find(&user)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Error querying group member",
+				"error":   result.Error.Error(),
+			})
+			return
+		}
+		var x models.Response_user;
+		x.Email=user.Email;
+		x.ID=user.ID;
+		x.Name=user.Name;
+
+		users = append(users, x);
+	}
+
+
+	c.JSON(http.StatusOK, gin.H{"group_users": users})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func AddMember(c *gin.Context) {
+	GroupId := c.Query("id")
+
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		// Handle the error if the conversion fails
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+	var body struct {
+		Email string
+	}
+	err = c.Bind(&body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not parse the  add member data"})
+		return
+	}
+
+	var user models.User
+	db.Db.Where("Email = ?", body.Email).First(&user)
+
+	// Check if user exists
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "email id is not exist"})
+		return
+	}
+var  Already_member models.MemberGroup
+db.Db.Where("group_id = ? AND member_id = ?", groupID, user.ID).First(&Already_member);
+
+if Already_member.ID!=0{
+	c.JSON(http.StatusBadRequest, gin.H{"message": "user is already added in the group"})
+		return
+}
+
+
+	var member models.MemberGroup
+	member.MemberId = user.ID
+	member.GroupId = uint(groupID)
+	result := db.Db.Create(&member)
+	if result.Error != nil {
+
+		c.JSON(http.StatusBadRequest, gin.H{"message": "addition of member is failed"})
+		return
+		
+	}
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Successfully created group",
+		"member_id": user.ID,
+		"group_id" :groupID,
+	})
+
+
+}
+
+
+
+func AddMoney(c *gin.Context) {
+	GroupId := c.Query("id")
+
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+	var expense models.Expense_Request
+	err = c.ShouldBindJSON(&expense)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not parse the data"})
+		return
+	}
+
+	var user models.User
+	db.Db.Where("email = ?", expense.GivenByEmail).Find(&user)
+
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "The user who is giving amount is not registered"})
+		return
+	}
+
+	var expense_db models.Expense_db
+	expense_db.Amount = expense.Amount
+	expense_db.GivenById = user.ID
+	expense_db.GroupId = uint(groupID)
+	expense_db.Description = expense.Description
+	expense_db.Category = expense.Category
+
+	tx := db.Db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "could not start transaction"})
+		return
+	}
+
+	if err := tx.Create(&expense_db).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
+		return
+	}
+
+	var member_groups []models.MemberGroup
+	if err := tx.Where("group_id = ?", groupID).Find(&member_groups).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"message": "could not retrieve members"})
+		return
+	}
+
+	if len(member_groups) == 0 {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{"message": "No members found in the group"})
+		return
+	}
+
+	for _, member_group := range member_groups {
+		
+			var debit models.DebtTrack
+		debit.ExpenseId = expense_db.ID
+		debit.GivenById = expense_db.GivenById
+		debit.Amount = (expense_db.Amount) / uint(len(member_groups))
+		debit.OwnById = member_group.MemberId
+        if (uint(debit.GivenById)!=uint(debit.OwnById)){
+		if err := tx.Create(&debit).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
+			return
+		}
+		}
+		
+
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "could not commit transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Transaction completed successfully"})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func Exchange(c *gin.Context) {
+    // Parse the query parameters
+    memberIDStr := c.Query("member_id")
+    GroupId:= c.Query("group_id")
+
+    // Convert member_id and group_id to integers
+	memberID, err := strconv.Atoi(memberIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", memberIDStr),
+		})
+		return
+	}
+
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+    // Get the user from the context
+    user, exists := c.Get("user")
+    if !exists {
+        c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+        return
+    }
+
+    userModel, ok := user.(models.User)
+    if !ok {
+        c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+        return
+    }
+
+    var expenseTables []models.Expense_db
+
+    // Fetch expenses where the user is either the giver or receiver within the group
+    result := db.Db.Where("(given_by_id = ? OR given_by_id = ?) AND group_id = ?", memberID, userModel.ID, groupID).Find(&expenseTables)
+    if result.Error != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching expense data"})
+        return
+    }
+
+    var response models.OverallResponseExchange
+	response.TotalAmount=0;
+    
+    // Iterate through each expense and calculate the corresponding exchange data
+    for _, expenseTable := range expenseTables {
+        var responseArray models.ResponseExchange
+        var debitTable models.DebtTrack
+
+	
+
+        // Fetch the debit entry for the expense between the two users
+        result = db.Db.Where("((given_by_id = ? AND own_by_id = ?) OR (given_by_id = ? AND own_by_id = ?)) AND expense_id = ?", 
+            memberID, userModel.ID, 
+            userModel.ID, memberID, 
+            expenseTable.ID).Find(&debitTable)
+
+        if result.Error != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching debit data"})
+            return
+        }
+
+        var x int64 = -1
+		responseArray.Expense_id=expenseTable.ID
+		responseArray.Debit_id=debitTable.ID
+
+        // Populate the response array with the category, description, and calculated amount
+        responseArray.Category = expenseTable.Category
+        responseArray.Description = expenseTable.Description
+        if debitTable.GivenById == userModel.ID {
+            responseArray.ExchangeAmount = int64(debitTable.Amount)
+            response.TotalAmount += responseArray.ExchangeAmount
+        } else {
+            responseArray.ExchangeAmount = int64(debitTable.Amount) * x
+            response.TotalAmount += responseArray.ExchangeAmount
+        }
+
+        // Append the response array to the overall response
+        response.Exchanges = append(response.Exchanges, responseArray)
+    }
+
+    // Send the response
+    c.JSON(http.StatusOK, gin.H{
+        "message": "Successfully fetched settlement",
+        "data":    response,
+    })
 }

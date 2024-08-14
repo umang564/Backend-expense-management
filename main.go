@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
-    db.Db.AutoMigrate(&models.MemberGroup{});
+    db.Db.AutoMigrate(&models.DebtTrack{});
 	// Automigrate the schema
 
 	if err != nil {
