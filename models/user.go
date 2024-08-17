@@ -8,28 +8,83 @@ import (
 )
 
 type User struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	Name      string    `gorm:"size:100;not null"`
-	Email     string    `gorm:"size:100;unique;not null"`
-	Password  string    `gorm:"size:255;not null"`
-	CreatedAt time.Time `gorm:"autoCreateTime"`
+	ID        uint           `gorm:"primaryKey;autoIncrement"`
+	Name      string         `gorm:"size:100;not null"`
+	Email     string         `gorm:"size:100;unique;not null"`
+	Password  string         `gorm:"size:255;not null"`
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"` // Soft delete field
 }
 
 type Group struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	Name      string    `gorm:"size:100;not null"`
-	AdminID   uint      `gorm:"not null"`                         // Foreign key referencing User.ID
-	Admin     User      `gorm:"foreignKey:AdminID;references:ID"` // Association
-	CreatedAt time.Time `gorm:"autoCreateTime"`
+	ID        uint           `gorm:"primaryKey;autoIncrement"`
+	Name      string         `gorm:"size:100;not null"`
+	AdminID   uint           `gorm:"not null"`                         // Foreign key referencing User.ID
+	Admin     User           `gorm:"foreignKey:AdminID;references:ID;constraint:OnDelete:CASCADE"` // Association with cascade delete
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"` // Soft delete field
 }
 
 type MemberGroup struct {
-	ID       uint  `gorm:"primaryKey;autoIncrement"`
-	MemberId uint  `gorm:"not null"`
-	Member   User  `gorm:"foreignKey:MemberId;references:ID"`
-	GroupId  uint  `gorm:"not null"`
-	Group    Group `gorm:"foreignKey:GroupId;references:ID"`
+	ID        uint           `gorm:"primaryKey;autoIncrement"`
+	MemberId  uint           `gorm:"not null"`
+	Member    User           `gorm:"foreignKey:MemberId;references:ID;constraint:OnDelete:CASCADE"` // Cascade delete for Member
+	GroupId   uint           `gorm:"not null"`
+	Group     Group          `gorm:"foreignKey:GroupId;references:ID;constraint:OnDelete:CASCADE"`  // Cascade delete for Group
+	DeletedAt gorm.DeletedAt `gorm:"index"` // Soft delete field
 }
+
+type Expense_db struct {
+	ID          uint           `gorm:"primaryKey;autoIncrement"`
+	GroupId     uint           `gorm:"not null"`
+	Group       Group          `gorm:"foreignKey:GroupId;references:ID;constraint:OnDelete:CASCADE"`  // Cascade delete for Group
+	GivenById   uint           `gorm:"not null"`
+	GivenBy     User           `gorm:"foreignKey:GivenById;references:ID;constraint:OnDelete:CASCADE"` // Cascade delete for User (GivenBy)
+	Amount      uint           `gorm:"not null"`
+	Category    string         `gorm:"size:200;not null"`
+	Description string         `gorm:"size:200;not null"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime"`
+	DeletedAt   gorm.DeletedAt `gorm:"index"` // Soft delete field
+}
+
+
+type Group_Details struct{
+	GivenByName  string         `gorm:"size:100;not null"`
+	Amount       uint           `gorm:"not null"`
+	Category     string         `gorm:"size:200;not null"`
+	Description  string         `gorm:"size:200;not null"`
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+type DebtTrack struct {
+	ID          uint           `gorm:"primaryKey;autoIncrement"`
+	ExpenseId   uint           `gorm:"not null"`
+	Expense     Expense_db     `gorm:"foreignKey:ExpenseId;references:ID;constraint:OnDelete:CASCADE"` // Cascade delete for Expense
+	GivenById   uint           `gorm:"not null"`
+	GivenBy     User           `gorm:"foreignKey:GivenById;references:ID;constraint:OnDelete:CASCADE"`  // Cascade delete for User (GivenBy)
+	OwnById     uint           `gorm:"not null"`
+	OwnBy       User           `gorm:"foreignKey:OwnById;references:ID;constraint:OnDelete:CASCADE"`    // Cascade delete for User (OwnBy)
+	Amount      uint           `gorm:"not null"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime"`
+	DeletedAt   gorm.DeletedAt `gorm:"index"` // Soft delete field
+}
+
+
+
+
+
 type Response_Group struct {
 	ID      uint   `gorm:"primaryKey;autoIncrement"`
 	Name    string `gorm:"size:100;not null"`
@@ -42,18 +97,7 @@ type Response_user struct {
 	Email string `gorm:"size:100;unique;not null"`
 }
 
-type Expense_db struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement"`
-	GroupId     uint           `gorm:"not null"`
-	Group       Group          `gorm:"foreignKey:GroupId;references:ID"`
-	GivenById   uint           `gorm:"not null"`
-	GivenBy     User           `gorm:"foreignKey:GivenById;references:ID"`
-	Amount      uint           `gorm:"not null"`
-	Category    string         `gorm:"size:200;not null"`
-	Description string         `gorm:"size:200;not null"`
-	CreatedAt   time.Time      `gorm:"autoCreateTime"`
-	DeletedAt   gorm.DeletedAt `gorm:"index"` // Soft delete field
-}
+
 
 
 type Expense_Request struct {
@@ -69,18 +113,7 @@ type Expense_Request struct {
 	DeletedAt   gorm.DeletedAt `gorm:"index"` // Soft delete field
 }
 
-type DebtTrack struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement"`
-	ExpenseId   uint           `gorm:"not null"`
-	Expense     Expense_db     `gorm:"foreignKey:ExpenseId;references:ID"`
-	GivenById   uint           `gorm:"not null"`
-	GivenBy     User           `gorm:"foreignKey:GivenById;references:ID"`
-	OwnById     uint           `gorm:"not null"`
-	OwnBy       User           `gorm:"foreignKey:OwnById;references:ID"` // Corrected reference to OwnById
-	Amount      uint           `gorm:"not null"`
-	CreatedAt   time.Time      `gorm:"autoCreateTime"`
-	DeletedAt   gorm.DeletedAt `gorm:"index"` // Soft delete field
-}
+
 
 
 
@@ -97,8 +130,17 @@ type OverallResponseExchange struct {
     Exchanges       []ResponseExchange `gorm:"-"`
 }
 
+type DebitRequest struct{
+	DebitId   uint           `gorm:"not null"`
+	MemberID  uint           `gorm:"not null"`
 
+}
 
+type  Notify struct{
+	Member_id  uint           `gorm:"not null"`
+	 Total_amount    uint           `gorm:"not null"`
+
+}
 
 
 

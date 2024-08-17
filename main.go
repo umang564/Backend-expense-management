@@ -7,16 +7,46 @@ import (
 	"app.com/models"
 	"app.com/router"
 	"github.com/gin-gonic/gin"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	
 )
+func sendEmail(to string, subject string, body string) error {
+	from := mail.NewEmail("Example User", "umangkumar9936@gmail.com")
+	toEmail := mail.NewEmail("Recipient", to)
+	message := mail.NewSingleEmail(from, subject, toEmail, body, body)
+	client := sendgrid.NewSendClient("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")
+
+	response, err := client.Send(message)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Response Status Code: %d", response.StatusCode)
+	log.Printf("Response Body: %s", response.Body)
+	log.Printf("Response Headers: %v", response.Headers)
+
+	return nil
+}
+
+
 
 func main() {
+	
+	
+
 	db.InitDB()
 	server := gin.Default()
 	_, err := db.InitDB()
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
-    db.Db.AutoMigrate(&models.DebtTrack{});
+	db.Db.AutoMigrate(&models.User{});
+	db.Db.AutoMigrate(&models.Group{});
+	db.Db.AutoMigrate(&models.MemberGroup{});
+	db.Db.AutoMigrate(&models.Expense_db{});
+	db.Db.AutoMigrate(&models.DebtTrack{})
+
 	// Automigrate the schema
 
 	if err != nil {

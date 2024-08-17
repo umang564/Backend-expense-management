@@ -19,6 +19,11 @@ func Routes(router *gin.Engine) {
 		userGroup.GET("/viewmember",handler.ViewMember)
 		userGroup.POST("addmoney",handler.AddMoney)
 		userGroup.GET("/exchange",handler.Exchange)
+		userGroup.DELETE("/settleddebit",handler.Debit)
+		userGroup.POST("/notify",handler.Notify)
+		userGroup.DELETE("/deleteGroup",handler.DeleteGroup)
+		userGroup.GET("/groupDetails",handler.GroupDetails)
+		userGroup.DELETE("/allsettle",handler.AllSettle)
 
 
 

@@ -11,8 +11,29 @@ import (
 	"app.com/models"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"golang.org/x/crypto/bcrypt"
 )
+
+
+func sendEmail(to string, subject string, body string) error {
+	from := mail.NewEmail("Umang split app", "umangkumar9936@gmail.com")
+	toEmail := mail.NewEmail("Recipient", to)
+	message := mail.NewSingleEmail(from, subject, toEmail, body, body)
+	client := sendgrid.NewSendClient("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")
+
+	response, err := client.Send(message)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Response Status Code: %d", response.StatusCode)
+	log.Printf("Response Body: %s", response.Body)
+	log.Printf("Response Headers: %v", response.Headers)
+
+	return nil
+}
 
 func Getuser(c *gin.Context) {
 
@@ -188,29 +209,6 @@ func Creategroup(c *gin.Context) {
 	})
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 func GetGroupName(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
@@ -249,21 +247,29 @@ func GetGroupName(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"group_users": groups})
 }
 
-
-
 func ViewMember(c *gin.Context) {
-	
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
 	GroupId := c.Query("id")
 
 	groupID, err := strconv.Atoi(GroupId)
 	if err != nil {
-	
+
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
 		})
 		return
 	}
-
 
 	var groupUsers []models.MemberGroup
 	result := db.Db.Where("group_id = ?", groupID).Find(&groupUsers)
@@ -274,7 +280,6 @@ func ViewMember(c *gin.Context) {
 		})
 		return
 	}
-
 
 	var users []models.Response_user
 	for _, member := range groupUsers {
@@ -287,30 +292,18 @@ func ViewMember(c *gin.Context) {
 			})
 			return
 		}
-		var x models.Response_user;
-		x.Email=user.Email;
-		x.ID=user.ID;
-		x.Name=user.Name;
+		var x models.Response_user
+		x.Email = user.Email
+		x.ID = user.ID
+		x.Name = user.Name
+		if(x.ID!=userModel.ID){
 
-		users = append(users, x);
+		users = append(users, x)
+		}
 	}
-
 
 	c.JSON(http.StatusOK, gin.H{"group_users": users})
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 func AddMember(c *gin.Context) {
 	GroupId := c.Query("id")
@@ -340,14 +333,13 @@ func AddMember(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "email id is not exist"})
 		return
 	}
-var  Already_member models.MemberGroup
-db.Db.Where("group_id = ? AND member_id = ?", groupID, user.ID).First(&Already_member);
+	var Already_member models.MemberGroup
+	db.Db.Where("group_id = ? AND member_id = ?", groupID, user.ID).First(&Already_member)
 
-if Already_member.ID!=0{
-	c.JSON(http.StatusBadRequest, gin.H{"message": "user is already added in the group"})
+	if Already_member.ID != 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "user is already added in the group"})
 		return
-}
-
+	}
 
 	var member models.MemberGroup
 	member.MemberId = user.ID
@@ -357,18 +349,15 @@ if Already_member.ID!=0{
 
 		c.JSON(http.StatusBadRequest, gin.H{"message": "addition of member is failed"})
 		return
-		
+
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"message":  "Successfully created group",
+		"message":   "Successfully created group",
 		"member_id": user.ID,
-		"group_id" :groupID,
+		"group_id":  groupID,
 	})
 
-
 }
-
-
 
 func AddMoney(c *gin.Context) {
 	GroupId := c.Query("id")
@@ -429,20 +418,19 @@ func AddMoney(c *gin.Context) {
 	}
 
 	for _, member_group := range member_groups {
-		
-			var debit models.DebtTrack
+
+		var debit models.DebtTrack
 		debit.ExpenseId = expense_db.ID
 		debit.GivenById = expense_db.GivenById
 		debit.Amount = (expense_db.Amount) / uint(len(member_groups))
 		debit.OwnById = member_group.MemberId
-        if (uint(debit.GivenById)!=uint(debit.OwnById)){
-		if err := tx.Create(&debit).Error; err != nil {
-			tx.Rollback()
-			c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
-			return
+		if uint(debit.GivenById) != uint(debit.OwnById) {
+			if err := tx.Create(&debit).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusBadRequest, gin.H{"message": "could not save data to the database"})
+				return
+			}
 		}
-		}
-		
 
 	}
 
@@ -454,25 +442,12 @@ func AddMoney(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction completed successfully"})
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 func Exchange(c *gin.Context) {
-    // Parse the query parameters
-    memberIDStr := c.Query("member_id")
-    GroupId:= c.Query("group_id")
+	// Parse the query parameters
+	memberIDStr := c.Query("member_id")
+	GroupId := c.Query("group_id")
 
-    // Convert member_id and group_id to integers
+	// Convert member_id and group_id to integers
 	memberID, err := strconv.Atoi(memberIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -489,71 +464,299 @@ func Exchange(c *gin.Context) {
 		return
 	}
 
-    // Get the user from the context
-    user, exists := c.Get("user")
-    if !exists {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
-        return
-    }
+	// Get the user from the context
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
 
-    userModel, ok := user.(models.User)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
-        return
-    }
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
 
-    var expenseTables []models.Expense_db
+	var expenseTables []models.Expense_db
 
-    // Fetch expenses where the user is either the giver or receiver within the group
-    result := db.Db.Where("(given_by_id = ? OR given_by_id = ?) AND group_id = ?", memberID, userModel.ID, groupID).Find(&expenseTables)
-    if result.Error != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching expense data"})
-        return
-    }
+	// Fetch expenses where the user is either the giver or receiver within the group
+	result := db.Db.Where("(given_by_id = ? OR given_by_id = ?) AND group_id = ?", memberID, userModel.ID, groupID).Find(&expenseTables)
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching expense data"})
+		return
+	}
 
-    var response models.OverallResponseExchange
-	response.TotalAmount=0;
-    
-    // Iterate through each expense and calculate the corresponding exchange data
-    for _, expenseTable := range expenseTables {
-        var responseArray models.ResponseExchange
-        var debitTable models.DebtTrack
+	var response models.OverallResponseExchange
+	response.TotalAmount = 0
 
+	// Iterate through each expense and calculate the corresponding exchange data
+	for _, expenseTable := range expenseTables {
+		var responseArray models.ResponseExchange
+		var debitTable models.DebtTrack
+
+		// Fetch the debit entry for the expense between the two users
+		result = db.Db.Where("((given_by_id = ? AND own_by_id = ?) OR (given_by_id = ? AND own_by_id = ?)) AND expense_id = ?",
+			memberID, userModel.ID,
+			userModel.ID, memberID,
+			expenseTable.ID).Find(&debitTable)
+
+		if result.Error != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching debit data"})
+			return
+		}
+
+		if debitTable.ID != 0 {
+			var x int64 = -1
+			responseArray.Expense_id = expenseTable.ID
+			responseArray.Debit_id = debitTable.ID
+
+			// Populate the response array with the category, description, and calculated amount
+			responseArray.Category = expenseTable.Category
+			responseArray.Description = expenseTable.Description
+
+			if debitTable.GivenById == userModel.ID {
+				responseArray.ExchangeAmount = int64(debitTable.Amount)
+				response.TotalAmount += responseArray.ExchangeAmount
+			} else {
+				responseArray.ExchangeAmount = int64(debitTable.Amount) * x
+				response.TotalAmount += responseArray.ExchangeAmount
+			}
+
+			// Append the response array to the overall response
+			response.Exchanges = append(response.Exchanges, responseArray)
+		}
+	}
+
+	// Send the response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully fetched settlement",
+		"data":    response,
+	})
+}
+
+func Debit(c *gin.Context) {
+
+	var res models.DebitRequest
+
+	// Bind the JSON payload to the res struct
+	if err := c.ShouldBindJSON(&res); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Could not parse the data sent while clicking on settled delete button"})
+		return
+	}
+  var user models.User
+  db.Db.Where("id=? ",res.MemberID).Find(&user);
+  var debitx models.DebtTrack
+  db.Db.Where("id=?",res.DebitId).Find(&debitx);
+
+	var debit models.DebtTrack
+	var amount int = int(debitx.Amount)
 	
+    var expense models.Expense_db
+	db.Db.Where("id=?",debitx.ExpenseId).Find(&expense)
+	// Perform the soft delete based on the DebitId
+	if err := db.Db.Where("id = ?", res.DebitId).Delete(&debit).Error; err != nil {
+		// Handle error
+		log.Println("Error while performing soft delete:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while deleting record"})
+		return
+	}
+	err := sendEmail(user.Email, "expense cleared on particular  settlement", fmt.Sprintf("expense cleared on the  category %s \n of amount =%d",expense.Category,amount))
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
 
-        // Fetch the debit entry for the expense between the two users
-        result = db.Db.Where("((given_by_id = ? AND own_by_id = ?) OR (given_by_id = ? AND own_by_id = ?)) AND expense_id = ?", 
-            memberID, userModel.ID, 
-            userModel.ID, memberID, 
-            expenseTable.ID).Find(&debitTable)
 
-        if result.Error != nil {
-            c.JSON(http.StatusBadRequest, gin.H{"message": "problem in fetching debit data"})
-            return
-        }
 
-        var x int64 = -1
-		responseArray.Expense_id=expenseTable.ID
-		responseArray.Debit_id=debitTable.ID
+	log.Println("Record soft deleted successfully")
+	c.JSON(http.StatusOK, gin.H{"message": "Record soft deleted successfully"})
+}
 
-        // Populate the response array with the category, description, and calculated amount
-        responseArray.Category = expenseTable.Category
-        responseArray.Description = expenseTable.Description
-        if debitTable.GivenById == userModel.ID {
-            responseArray.ExchangeAmount = int64(debitTable.Amount)
-            response.TotalAmount += responseArray.ExchangeAmount
-        } else {
-            responseArray.ExchangeAmount = int64(debitTable.Amount) * x
-            response.TotalAmount += responseArray.ExchangeAmount
-        }
 
-        // Append the response array to the overall response
-        response.Exchanges = append(response.Exchanges, responseArray)
-    }
 
-    // Send the response
-    c.JSON(http.StatusOK, gin.H{
-        "message": "Successfully fetched settlement",
-        "data":    response,
-    })
+
+func Notify( c *gin.Context){
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
+
+	var notify models.Notify
+	if err := c.ShouldBindJSON(&notify); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Could not parse the data sent while clicking on settled delete button"})
+		return
+	}
+	
+     var member models.User;
+	 db.Db.Where("id=?",notify.Member_id).Find(&member);
+	 err := sendEmail(
+		member.Email, 
+		"Notification for the balance", 
+		fmt.Sprintf("You need to pay balance = %d\nWith username = %s\nWith email = %s", 
+		notify.Total_amount, userModel.Name, userModel.Email),
+	)
+	
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
+	 
+	c.JSON(http.StatusOK, gin.H{"message": "Notified successfully"})
+
+
+}
+
+func DeleteGroup(c *gin.Context){
+	GroupId := c.Query("groupid")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+ var group models.Group;
+	if err := db.Db.Where("id = ?", groupID).Delete(&group).Error; err != nil {
+		// Handle error
+		log.Println("Error while performing soft delete:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while deleting record"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "message deleted  successfully"})
+
+
+}
+
+
+func  GroupDetails(c *gin.Context){
+
+	GroupId := c.Query("groupid")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+	var expense_dbs []models.Expense_db;
+	  if err:= db.Db.Where("group_id=?",groupID).Find(&expense_dbs).Error; err != nil {
+		// Handle error
+		log.Println("problem in fetching expense array", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while fetching expense"})
+		return
+	}
+
+var ress []models.Group_Details;
+    for _ ,expense_db:=range  expense_dbs{
+	var	res models.Group_Details;
+
+            var user models.User
+			db.Db.Where("id=?",expense_db.GivenById).Find(&user);
+
+           res.Amount=expense_db.Amount;
+		   res.Category=expense_db.Category
+		   res.GivenByName=user.Name
+		   res.Description=expense_db.Description
+
+           ress= append(ress,res);
+	}
+
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully fetched settlement",
+		"data":    ress,
+	})
+
+
+
+}
+func AllSettle(c *gin.Context) {
+	GroupId := c.Query("groupid")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+	MemberId := c.Query("memberid")
+	memberID, err := strconv.Atoi(MemberId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid member ID: %s", MemberId),
+		})
+		return
+	}
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
+	var expense_dbs []models.Expense_db
+	db.Db.Where("(given_by_id = ? OR given_by_id = ?) AND group_id = ?", memberID, userModel.ID, groupID).Find(&expense_dbs)
+
+	// Start the transaction
+	tx := db.Db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to start transaction"})
+		return
+	}
+
+	for _, expense_db := range expense_dbs {
+		var x models.DebtTrack
+		err := tx.Where("((given_by_id = ? AND own_by_id = ?) OR (given_by_id = ? AND own_by_id = ?)) AND expense_id = ?",
+			memberID, userModel.ID,
+			userModel.ID, memberID,
+			expense_db.ID).Delete(&x).Error
+
+		if err != nil {
+			tx.Rollback() // Rollback the transaction in case of error
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to delete debt track"})
+			return
+		}
+	}
+
+	// Commit the transaction if all delete operations are successful
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to commit transaction"})
+		return
+	}
+
+	var member models.User
+	db.Db.Where("id = ?", memberID).Find(&member)
+	err = sendEmail(
+		member.Email,
+		"Notification for the balance",
+		"The amount between us has been settled down",
+	)
+
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully deleted",
+	})
 }
