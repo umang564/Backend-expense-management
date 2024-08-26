@@ -53,6 +53,10 @@ func Getuser(c *gin.Context) {
 
 }
 
+func HealthCheck(c *gin.Context) {
+	c.JSON(200, gin.H{"message": "hello umang"})
+}
+
 func Createuserfunc(c *gin.Context) {
 	var user models.User
 
@@ -804,33 +808,6 @@ func AllSettle(c *gin.Context) {
 		"message": "Successfully deleted",
 	})
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 const (
 	bucketName = "bucket-umang"
