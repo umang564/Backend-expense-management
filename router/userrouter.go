@@ -24,6 +24,7 @@ func Routes(router *gin.Engine) {
 		userGroup.DELETE("/deleteGroup",handler.DeleteGroup)
 		userGroup.GET("/groupDetails",handler.GroupDetails)
 		userGroup.DELETE("/allsettle",handler.AllSettle)
+		userGroup.GET("/csvfile",handler.CsvFile);
 
 
 

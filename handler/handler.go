@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,13 +11,15 @@ import (
 
 	"app.com/db"
 	"app.com/models"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"golang.org/x/crypto/bcrypt"
 )
-
 
 func sendEmail(to string, subject string, body string) error {
 	from := mail.NewEmail("Umang split app", "umangkumar9936@gmail.com")
@@ -70,6 +74,14 @@ func Createuserfunc(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err})
 		return
 	}
+
+	err = sendEmail(user.Email, "Registration on umang  split app", "you are successfully registerd in umang split app")
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Successfully created user",
 		"user":    user,
@@ -119,9 +131,17 @@ func Login(c *gin.Context) {
 
 	// Send the token in the response header
 	c.Header("Authorization", "Bearer "+tokenString)
+
+	err = sendEmail(body.Email, "login in umang split app", "you are successfully login in umang split app")
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "login successful",
-		"token":   tokenString, // You can still include it in the response body if needed
+		"token":   tokenString,
+		"id":      user.ID, "name": user.Name, "email": user.Email, // You can still include it in the response body if needed
 	})
 }
 
@@ -248,17 +268,6 @@ func GetGroupName(c *gin.Context) {
 }
 
 func ViewMember(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
-		return
-	}
-
-	userModel, ok := user.(models.User)
-	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
-		return
-	}
 
 	GroupId := c.Query("id")
 
@@ -296,16 +305,26 @@ func ViewMember(c *gin.Context) {
 		x.Email = user.Email
 		x.ID = user.ID
 		x.Name = user.Name
-		if(x.ID!=userModel.ID){
 
 		users = append(users, x)
-		}
+
 	}
 
 	c.JSON(http.StatusOK, gin.H{"group_users": users})
 }
 
 func AddMember(c *gin.Context) {
+	x, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := x.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
 	GroupId := c.Query("id")
 
 	groupID, err := strconv.Atoi(GroupId)
@@ -316,6 +335,8 @@ func AddMember(c *gin.Context) {
 		})
 		return
 	}
+	var group models.Group
+	db.Db.Where("id=?", groupID).Find(&group)
 	var body struct {
 		Email string
 	}
@@ -351,6 +372,13 @@ func AddMember(c *gin.Context) {
 		return
 
 	}
+
+	err = sendEmail(body.Email, "you are added in the group", fmt.Sprintf("you are added in the group %s \n created by  =%s \n whose email id ", group.Name, userModel.Name, userModel.Email))
+	if err != nil {
+		log.Fatalf("Failed to send email: %v", err)
+	} else {
+		log.Println("Email sent successfully!")
+	}
 	c.JSON(http.StatusCreated, gin.H{
 		"message":   "Successfully created group",
 		"member_id": user.ID,
@@ -360,6 +388,7 @@ func AddMember(c *gin.Context) {
 }
 
 func AddMoney(c *gin.Context) {
+
 	GroupId := c.Query("id")
 
 	groupID, err := strconv.Atoi(GroupId)
@@ -376,7 +405,9 @@ func AddMoney(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "could not parse the data"})
 		return
 	}
-
+	fmt.Println(expense.MemberIDs)
+	fmt.Println(expense.Amount)
+	fmt.Println(expense.Category)
 	var user models.User
 	db.Db.Where("email = ?", expense.GivenByEmail).Find(&user)
 
@@ -417,13 +448,13 @@ func AddMoney(c *gin.Context) {
 		return
 	}
 
-	for _, member_group := range member_groups {
+	for _, member_group := range expense.MemberIDs {
 
 		var debit models.DebtTrack
 		debit.ExpenseId = expense_db.ID
 		debit.GivenById = expense_db.GivenById
-		debit.Amount = (expense_db.Amount) / uint(len(member_groups))
-		debit.OwnById = member_group.MemberId
+		debit.Amount = (expense_db.Amount) / uint(len(expense.MemberIDs))
+		debit.OwnById = member_group
 		if uint(debit.GivenById) != uint(debit.OwnById) {
 			if err := tx.Create(&debit).Error; err != nil {
 				tx.Rollback()
@@ -543,16 +574,16 @@ func Debit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Could not parse the data sent while clicking on settled delete button"})
 		return
 	}
-  var user models.User
-  db.Db.Where("id=? ",res.MemberID).Find(&user);
-  var debitx models.DebtTrack
-  db.Db.Where("id=?",res.DebitId).Find(&debitx);
+	var user models.User
+	db.Db.Where("id=? ", res.MemberID).Find(&user)
+	var debitx models.DebtTrack
+	db.Db.Where("id=?", res.DebitId).Find(&debitx)
 
 	var debit models.DebtTrack
 	var amount int = int(debitx.Amount)
-	
-    var expense models.Expense_db
-	db.Db.Where("id=?",debitx.ExpenseId).Find(&expense)
+
+	var expense models.Expense_db
+	db.Db.Where("id=?", debitx.ExpenseId).Find(&expense)
 	// Perform the soft delete based on the DebitId
 	if err := db.Db.Where("id = ?", res.DebitId).Delete(&debit).Error; err != nil {
 		// Handle error
@@ -560,23 +591,18 @@ func Debit(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while deleting record"})
 		return
 	}
-	err := sendEmail(user.Email, "expense cleared on particular  settlement", fmt.Sprintf("expense cleared on the  category %s \n of amount =%d",expense.Category,amount))
+	err := sendEmail(user.Email, "expense cleared on particular  settlement", fmt.Sprintf("expense cleared on the  category %s \n of amount =%d", expense.Category, amount))
 	if err != nil {
 		log.Fatalf("Failed to send email: %v", err)
 	} else {
 		log.Println("Email sent successfully!")
 	}
 
-
-
 	log.Println("Record soft deleted successfully")
 	c.JSON(http.StatusOK, gin.H{"message": "Record soft deleted successfully"})
 }
 
-
-
-
-func Notify( c *gin.Context){
+func Notify(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
@@ -589,34 +615,32 @@ func Notify( c *gin.Context){
 		return
 	}
 
-
 	var notify models.Notify
 	if err := c.ShouldBindJSON(&notify); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Could not parse the data sent while clicking on settled delete button"})
 		return
 	}
-	
-     var member models.User;
-	 db.Db.Where("id=?",notify.Member_id).Find(&member);
-	 err := sendEmail(
-		member.Email, 
-		"Notification for the balance", 
-		fmt.Sprintf("You need to pay balance = %d\nWith username = %s\nWith email = %s", 
-		notify.Total_amount, userModel.Name, userModel.Email),
+
+	var member models.User
+	db.Db.Where("id=?", notify.Member_id).Find(&member)
+	err := sendEmail(
+		member.Email,
+		"Notification for the balance",
+		fmt.Sprintf("You need to pay balance = %d\nWith username = %s\nWith email = %s",
+			notify.Total_amount, userModel.Name, userModel.Email),
 	)
-	
+
 	if err != nil {
 		log.Fatalf("Failed to send email: %v", err)
 	} else {
 		log.Println("Email sent successfully!")
 	}
-	 
+
 	c.JSON(http.StatusOK, gin.H{"message": "Notified successfully"})
 
-
 }
 
-func DeleteGroup(c *gin.Context){
+func DeleteGroup(c *gin.Context) {
 	GroupId := c.Query("groupid")
 	groupID, err := strconv.Atoi(GroupId)
 	if err != nil {
@@ -625,21 +649,43 @@ func DeleteGroup(c *gin.Context){
 		})
 		return
 	}
- var group models.Group;
-	if err := db.Db.Where("id = ?", groupID).Delete(&group).Error; err != nil {
-		// Handle error
-		log.Println("Error while performing soft delete:", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while deleting record"})
+
+	// Start a transaction
+	tx := db.Db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to start transaction"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "message deleted  successfully"})
+	// Perform the delete operations
+	if err := tx.Where("group_id = ?", groupID).Delete(&models.MemberGroup{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete MemberGroup records"})
+		return
+	}
 
+	if err := tx.Where("group_id = ?", groupID).Delete(&models.Expense_db{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete Expense_db records"})
+		return
+	}
 
+	if err := tx.Where("id = ?", groupID).Delete(&models.Group{}).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to delete Group record"})
+		return
+	}
+
+	// Commit the transaction
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to commit transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Group deleted successfully"})
 }
 
-
-func  GroupDetails(c *gin.Context){
+func GroupDetails(c *gin.Context) {
 
 	GroupId := c.Query("groupid")
 	groupID, err := strconv.Atoi(GroupId)
@@ -649,38 +695,36 @@ func  GroupDetails(c *gin.Context){
 		})
 		return
 	}
-	var expense_dbs []models.Expense_db;
-	  if err:= db.Db.Where("group_id=?",groupID).Find(&expense_dbs).Error; err != nil {
+	var expense_dbs []models.Expense_db
+	if err := db.Db.Where("group_id=?", groupID).Find(&expense_dbs).Error; err != nil {
 		// Handle error
 		log.Println("problem in fetching expense array", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while fetching expense"})
 		return
 	}
 
-var ress []models.Group_Details;
-    for _ ,expense_db:=range  expense_dbs{
-	var	res models.Group_Details;
+	var ress []models.Group_Details
+	for _, expense_db := range expense_dbs {
+		var res models.Group_Details
 
-            var user models.User
-			db.Db.Where("id=?",expense_db.GivenById).Find(&user);
+		var user models.User
+		db.Db.Where("id=?", expense_db.GivenById).Find(&user)
 
-           res.Amount=expense_db.Amount;
-		   res.Category=expense_db.Category
-		   res.GivenByName=user.Name
-		   res.Description=expense_db.Description
+		res.Amount = expense_db.Amount
+		res.Category = expense_db.Category
+		res.GivenByName = user.Name
+		res.Description = expense_db.Description
 
-           ress= append(ress,res);
+		ress = append(ress, res)
 	}
-
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Successfully fetched settlement",
 		"data":    ress,
 	})
 
-
-
 }
+
 func AllSettle(c *gin.Context) {
 	GroupId := c.Query("groupid")
 	groupID, err := strconv.Atoi(GroupId)
@@ -758,5 +802,131 @@ func AllSettle(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Successfully deleted",
+	})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const (
+	bucketName = "bucket-umang"
+	region     = "ap-south-1" // e.g., "us-west-2"
+)
+
+func CsvFile(c *gin.Context) {
+	GroupId := c.Query("groupid")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+	var expense_dbs []models.Expense_db
+	if err := db.Db.Where("group_id=?", groupID).Find(&expense_dbs).Error; err != nil {
+		log.Println("problem in fetching expense array", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error while fetching expense"})
+		return
+	}
+
+	var ress []models.Group_Details
+	for _, expense_db := range expense_dbs {
+		var res models.Group_Details
+
+		var user models.User
+		db.Db.Where("id=?", expense_db.GivenById).Find(&user)
+
+		res.Amount = expense_db.Amount
+		res.Category = expense_db.Category
+		res.GivenByName = user.Name
+		res.Description = expense_db.Description
+
+		ress = append(ress, res)
+	}
+
+	// Generate CSV content
+	var csvBuffer bytes.Buffer
+	csvWriter := csv.NewWriter(&csvBuffer)
+
+	// Write CSV header
+	header := []string{"Amount", "Category", "GivenByName", "Description"}
+	if err := csvWriter.Write(header); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error writing CSV header"})
+		return
+	}
+
+	// Write CSV rows
+	for _, item := range ress {
+		record := []string{
+			fmt.Sprintf("%f", item.Amount),
+			item.Category,
+			item.GivenByName,
+			item.Description,
+		}
+		if err := csvWriter.Write(record); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error writing CSV record"})
+			return
+		}
+	}
+	csvWriter.Flush()
+
+	// Create a session with AWS
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(region),
+	})
+	if err != nil {
+		log.Println("Failed to create AWS session", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to create AWS session"})
+		return
+	}
+
+	s3Client := s3.New(sess)
+
+	// Upload CSV file to S3
+	objectKey := "expenses.csv"
+	_, err = s3Client.PutObject(&s3.PutObjectInput{
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(objectKey),
+		Body:        bytes.NewReader(csvBuffer.Bytes()),
+		ContentType: aws.String("text/csv"),
+	})
+	if err != nil {
+		log.Println("Failed to upload CSV to S3", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to upload CSV to S3"})
+		return
+	}
+
+	// Generate S3 URL
+	s3URL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucketName, region, objectKey)
+
+	// Return the URL
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully uploaded to S3",
+		"url":     s3URL,
 	})
 }
