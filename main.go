@@ -2,20 +2,23 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"app.com/db"
 	"app.com/models"
 	"app.com/router"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
-	
 )
+
 func sendEmail(to string, subject string, body string) error {
 	from := mail.NewEmail("Example User", "umangkumar9936@gmail.com")
 	toEmail := mail.NewEmail("Recipient", to)
 	message := mail.NewSingleEmail(from, subject, toEmail, body, body)
-	client := sendgrid.NewSendClient("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")
+	sendgridAPIKey := os.Getenv("SENDGRID_API_KEY")
+	client := sendgrid.NewSendClient(sendgridAPIKey)
 
 	response, err := client.Send(message)
 	if err != nil {
@@ -29,22 +32,24 @@ func sendEmail(to string, subject string, body string) error {
 	return nil
 }
 
-
-
 func main() {
-	
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	
 
 	db.InitDB()
 	server := gin.Default()
-	_, err := db.InitDB()
+	_, err = db.InitDB()
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
-	db.Db.AutoMigrate(&models.User{});
-	db.Db.AutoMigrate(&models.Group{});
-	db.Db.AutoMigrate(&models.MemberGroup{});
-	db.Db.AutoMigrate(&models.Expense_db{});
+	db.Db.AutoMigrate(&models.User{})
+	db.Db.AutoMigrate(&models.Group{})
+	db.Db.AutoMigrate(&models.MemberGroup{})
+	db.Db.AutoMigrate(&models.Expense_db{})
 	db.Db.AutoMigrate(&models.DebtTrack{})
 
 	// Automigrate the schema

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -25,7 +26,8 @@ func sendEmail(to string, subject string, body string) error {
 	from := mail.NewEmail("Umang split app", "umangkumar9936@gmail.com")
 	toEmail := mail.NewEmail("Recipient", to)
 	message := mail.NewSingleEmail(from, subject, toEmail, body, body)
-	client := sendgrid.NewSendClient("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")
+	sendgridAPIKey := os.Getenv("SENDGRID_API_KEY")
+	client := sendgrid.NewSendClient(sendgridAPIKey)
 
 	response, err := client.Send(message)
 	if err != nil {
