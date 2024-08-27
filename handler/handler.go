@@ -862,7 +862,8 @@ func CsvFile(c *gin.Context) {
 	// Write CSV rows
 	for _, item := range ress {
 		record := []string{
-			fmt.Sprintf("%f", item.Amount),
+	
+			fmt.Sprintf("%d", item.Amount),
 			item.Category,
 			item.GivenByName,
 			item.Description,
