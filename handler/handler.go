@@ -690,6 +690,30 @@ func DeleteGroup(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Group deleted successfully"})
 }
+func GetTotalAmount(c *gin.Context){
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+  var debit models.DebtTrack;
+  var totalAmount uint64
+  err:= db.Db.Model(&debit).Where("own_by_id = ?", userModel.ID).Select("SUM(amount)").Scan(&totalAmount)
+if(err!=nil){
+	c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount"})
+		return
+}
+c.JSON(http.StatusOK, gin.H{"total_amount": totalAmount});
+
+return;
+
+}
 
 func GroupDetails(c *gin.Context) {
 
@@ -701,6 +725,7 @@ func GroupDetails(c *gin.Context) {
 		})
 		return
 	}
+
 	var expense_dbs []models.Expense_db
 	if err := db.Db.Where("group_id=?", groupID).Find(&expense_dbs).Error; err != nil {
 		// Handle error

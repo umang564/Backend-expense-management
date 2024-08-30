@@ -26,6 +26,7 @@ func Routes(router *gin.Engine) {
 		userGroup.GET("/groupDetails", handler.GroupDetails)
 		userGroup.DELETE("/allsettle", handler.AllSettle)
 		userGroup.GET("/csvfile", handler.CsvFile)
+		userGroup.GET("/totalamount",handler.GetTotalAmount)
 
 		userGroup.GET("/validate", middleware.RequiredAuth, handler.Validate)
 	}
