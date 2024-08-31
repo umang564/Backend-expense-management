@@ -690,7 +690,7 @@ func DeleteGroup(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Group deleted successfully"})
 }
-func GetTotalAmount(c *gin.Context){
+func GetTotalAmount(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
@@ -702,18 +702,22 @@ func GetTotalAmount(c *gin.Context){
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
 		return
 	}
-  var debit models.DebtTrack;
-  var totalAmount uint64
-  err:= db.Db.Model(&debit).Where("own_by_id = ?", userModel.ID).Select("SUM(amount)").Scan(&totalAmount)
-if(err!=nil){
-	c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount"})
+
+	var totalAmount uint64
+	err := db.Db.Model(&models.DebtTrack{}).
+		Where("own_by_id = ?", userModel.ID).
+		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 is returned if the sum is NULL
+		Scan(&totalAmount).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount"})
 		return
-}
-c.JSON(http.StatusOK, gin.H{"total_amount": totalAmount});
+	}
 
-return;
-
+	c.JSON(http.StatusOK, gin.H{"total_amount": totalAmount})
 }
+
+
 
 func GroupDetails(c *gin.Context) {
 
