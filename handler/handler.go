@@ -476,8 +476,145 @@ func AddMoney(c *gin.Context) {
 		return
 	}
 
+	
+	
+	
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction completed successfully"})
 }
+
+
+func SettledExpense(c *gin.Context) {
+	GroupId := c.Query("group_id")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid group ID: %s", GroupId)})
+		return
+	}
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
+	var exp []models.Expense_db
+	if err := db.Db.Where("group_id = ?", groupID).Find(&exp).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch expenses"})
+		return
+	}
+
+	var ress []models.SettledExpense
+	for _, e := range exp {
+		var dbx []models.DebtTrack
+		if err := db.Db.Unscoped().
+			Where("(given_by_id = ? OR own_by_id = ?) AND expense_id = ? AND deleted_at IS NOT NULL", userModel.ID, userModel.ID, e.ID).
+			Find(&dbx).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch debt track"})
+			return
+		}
+
+
+for _,m:=range dbx{
+
+	var res models.SettledExpense
+	var GivenBy models.User;
+	if err := db.Db.Where("id = ?", m.GivenById).Find(&GivenBy).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch GivenByName"})
+		return
+	}
+	res.GivenByName=GivenBy.Name;
+
+	var OwnBy models.User;
+	if err := db.Db.Where("id = ?", m.OwnById).Find(&OwnBy).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch OwnByName"})
+		return
+	}
+	res.OwnByName=OwnBy.Name;
+	res.Category = e.Category
+	res.Time = m.DeletedAt
+	res.Amount = m.Amount
+
+	ress = append(ress, res)
+
+}
+	
+	}
+
+	c.JSON(http.StatusOK, ress)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func SuggestionList(c *gin.Context) {
+    Namelike := c.Query("Namelike")
+    var users []models.User
+
+    if Namelike == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Namelike query parameter is required"})
+        return
+    }
+
+    // Perform the query using the LIKE operator
+    if err := db.Db.Where("name LIKE ?", "%"+Namelike+"%").Find(&users).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching users"})
+        return
+    }
+
+
+var users1 []models.SuggestionList
+	for _,user:=range users{
+		var x models.SuggestionList
+		x.Email=user.Email;
+		x.Name=user.Name;
+		users1=append(users1, x);
+		
+	}
+    // Respond with the list of users
+    c.JSON(http.StatusOK, users1)
+}
+
+
+
+
+
+
+
+
+
+
+
 
 func Exchange(c *gin.Context) {
 	// Parse the query parameters
@@ -656,6 +793,26 @@ func DeleteGroup(c *gin.Context) {
 		return
 	}
 
+
+	var  dxx []models.DebtTrack;
+	var exp []models.Expense_db;
+	db.Db.Where("group_id=?",groupID).Find(&exp);
+	for _,e:=range exp{
+	db.Db.Where("expense_id=?",e.ID).Find(&dxx);
+	if(len(dxx)>0){
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "you can not delete the group"})
+		return
+	}
+
+	}
+
+
+
+
+
+
+
+
 	// Start a transaction
 	tx := db.Db.Begin()
 	if tx.Error != nil {
@@ -703,18 +860,34 @@ func GetTotalAmount(c *gin.Context) {
 		return
 	}
 
-	var totalAmount uint64
+	var totalAmountOwed uint64
 	err := db.Db.Model(&models.DebtTrack{}).
 		Where("own_by_id = ?", userModel.ID).
 		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 is returned if the sum is NULL
-		Scan(&totalAmount).Error
+		Scan(&totalAmountOwed).Error
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount owed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"total_amount": totalAmount})
+	var totalAmountLent uint64
+	err = db.Db.Model(&models.DebtTrack{}).
+		Where("given_by_id = ?", userModel.ID).
+		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 is returned if the sum is NULL
+		Scan(&totalAmountLent).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount lent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_amount_owe": totalAmountOwed,
+		"total_amount_lend": totalAmountLent,
+		"userEmail": userModel.Email,
+		"time": userModel.CreatedAt,
+	})
 }
 
 
@@ -939,3 +1112,4 @@ func CsvFile(c *gin.Context) {
 		"url":     s3URL,
 	})
 }
+

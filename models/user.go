@@ -16,6 +16,21 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"` // Soft delete field
 }
 
+type SuggestionList struct{
+
+	Name      string         `gorm:"size:100;not null"`
+	Email     string         `gorm:"size:100;unique;not null"`
+
+
+}
+type SettledExpense struct{
+OwnByName	string         `gorm:"size:100;not null"`
+GivenByName string         `gorm:"size:100;not null"`
+Category    string         `gorm:"size:200;not null"`
+Amount   uint           `gorm:"not null"`
+Time  gorm.DeletedAt `gorm:"index"` 
+}
+
 type Group struct {
 	ID        uint           `gorm:"primaryKey;autoIncrement"`
 	Name      string         `gorm:"size:100;not null"`
