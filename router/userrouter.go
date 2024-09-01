@@ -31,6 +31,9 @@ func Routes(router *gin.Engine) {
 		userGroup.GET("/validate", middleware.RequiredAuth, handler.Validate)
 		userGroup.GET("/like",handler.SuggestionList)
 		userGroup.GET("/settledexpense",handler.SettledExpense)
+		userGroup.GET("/admindetails",handler.AdminDetails)
+		userGroup.GET("/overallexpense",handler.OverallExpense)
+		userGroup.DELETE("/deletemember",handler.DeleteMember)
 	}
 
 	authGroup := router.Group("/auth")

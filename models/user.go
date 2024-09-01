@@ -31,6 +31,31 @@ Amount   uint           `gorm:"not null"`
 Time  gorm.DeletedAt `gorm:"index"` 
 }
 
+
+
+    type OverallDebits struct{
+      OweOrLent  string         `gorm:"size:100;not null"`
+	  Amount   int64  `gorm:"not null"`
+	  Category string         `gorm:"size:200;not null"`
+	  CreatedAt   time.Time      `gorm:"autoCreateTime"`
+      DeletedAt  gorm.DeletedAt `gorm:"index"` 
+
+
+
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
 type Group struct {
 	ID        uint           `gorm:"primaryKey;autoIncrement"`
 	Name      string         `gorm:"size:100;not null"`
@@ -79,7 +104,9 @@ type Group_Details struct {
 	GivenByName string `gorm:"size:100;not null"`
 	Amount      uint   `gorm:"not null"`
 	Category    string `gorm:"size:200;not null"`
+	InvolveUser  string  `gorm:"size:200;not null"`
 	Description string `gorm:"size:200;not null"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime"`
 }
 
 type Response_Group struct {

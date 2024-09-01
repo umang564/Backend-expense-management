@@ -800,17 +800,11 @@ func DeleteGroup(c *gin.Context) {
 	for _,e:=range exp{
 	db.Db.Where("expense_id=?",e.ID).Find(&dxx);
 	if(len(dxx)>0){
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "you can not delete the group"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "you can not delete the group as there is some settlement of group left"})
 		return
 	}
 
 	}
-
-
-
-
-
-
 
 
 	// Start a transaction
@@ -922,6 +916,27 @@ func GroupDetails(c *gin.Context) {
 		res.Category = expense_db.Category
 		res.GivenByName = user.Name
 		res.Description = expense_db.Description
+		var deb []models.DebtTrack;
+		db.Db.Where("expense_id=?",expense_db.ID).Find(&deb)
+		for _,c:=range deb{
+         var z models.User
+		 db.Db.Where("id=?",c.OwnById).Find(&z);
+		 res.InvolveUser=res.InvolveUser+"," +z.Name;
+		 
+
+
+		}
+
+
+
+		var y models.User
+		db.Db.Where("id=?" ,expense_db.GivenById).Find(&y)
+		res.InvolveUser=res.InvolveUser+"," +y.Name;
+		res.CreatedAt=expense_db.CreatedAt
+
+
+
+
 
 		ress = append(ress, res)
 	}
@@ -932,6 +947,229 @@ func GroupDetails(c *gin.Context) {
 	})
 
 }
+
+
+func AdminDetails(c *gin.Context){
+	GroupId := c.Query("group_id")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+var member_group models.MemberGroup;
+db.Db.Where("group_id=?",groupID).Find(&member_group);
+
+var user models.User;
+db.Db.Where("id=?",member_group.MemberId).Find(&user);
+
+
+c.JSON(http.StatusOK, gin.H{
+	"message": "Successfully fetched",
+	"Admin_name":user.Name,
+	"Admin_email":user.Email,
+
+})
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func OverallExpense(c *gin.Context){
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
+var  ress []models.OverallDebits;
+
+ 
+
+	var  deb  []models.DebtTrack;
+	db.Db.Unscoped().
+    Where("(given_by_id = ? OR own_by_id = ?)", userModel.ID, userModel.ID).
+    Find(&deb);
+	for _,x:=range deb{
+		var res models.OverallDebits;
+		if (x.GivenById==userModel.ID){
+       var user models.User;
+	   db.Db.Where("id=?",x.OwnById).Find(&user);
+	   res.OweOrLent=user.Name;
+	   res.Amount=int64(x.Amount)
+
+
+		}else{
+			var user models.User;
+
+			db.Db.Where("id=?",x.GivenById).Find(&user);
+			res.OweOrLent=user.Name;
+			res.Amount=int64(x.Amount)*-1;
+			res.DeletedAt=x.DeletedAt
+
+		}
+		
+		var e models.Expense_db;
+		db.Db.Unscoped().Where("id=?",x.ExpenseId).Find(&e);
+		res.Category=e.Category;
+		res.CreatedAt=e.CreatedAt
+		ress=append(ress, res)
+	}
+
+
+
+	c.JSON(http.StatusOK, ress)
+
+
+
+}
+ 
+
+
+func DeleteMember(c *gin.Context) {
+	GroupId := c.Query("groupid")
+	groupID, err := strconv.Atoi(GroupId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid group ID: %s", GroupId),
+		})
+		return
+	}
+
+	MemberId := c.Query("memberid")
+	memberID, err := strconv.Atoi(MemberId)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Invalid member ID: %s", MemberId),
+		})
+		return
+	}
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "User not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "User type assertion failed"})
+		return
+	}
+
+	// Fetch the group to ensure the user is the admin
+	var group models.Group
+	if err := db.Db.Where("id = ?", groupID).First(&group).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Group not found"})
+		return
+	}
+
+	if group.AdminID != userModel.ID {
+		c.JSON(http.StatusForbidden, gin.H{"message": "You cannot remove the member as you are not the admin"})
+		return
+	}
+
+	// Check if there are any unsettled debts
+	var expenses []models.Expense_db
+	if err := db.Db.Where("group_id = ?", groupID).Find(&expenses).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error fetching expenses"})
+		return
+	}
+
+	for _, expense := range expenses {
+		var debitRequests []models.DebtTrack
+		if err := db.Db.Where("(given_by_id = ? OR own_by_id = ?) AND expense_id = ?", memberID, memberID, expense.ID).Find(&debitRequests).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Error checking debit requests"})
+			return
+		}
+		if len(debitRequests) > 0 {
+			c.JSON(http.StatusConflict, gin.H{"message": "All the settlements are not done"})
+			return
+		}
+	}
+
+	// Delete the member from the group
+	if err := db.Db.Where("member_id = ? AND group_id = ?", memberID, groupID).Delete(&models.MemberGroup{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Error deleting member from group"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully deleted",
+	})
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 func AllSettle(c *gin.Context) {
 	GroupId := c.Query("groupid")
