@@ -23,7 +23,7 @@ import (
 )
 
 func sendEmail(to string, subject string, body string) error {
-	from := mail.NewEmail("Umang split app", "umangkumar9936@gmail.com")
+	from := mail.NewEmail("Splito", "umangkumar9936@gmail.com")
 	toEmail := mail.NewEmail("Recipient", to)
 	message := mail.NewSingleEmail(from, subject, toEmail, body, body)
 	sendgridAPIKey := os.Getenv("SENDGRID_API_KEY")
@@ -959,6 +959,8 @@ func AdminDetails(c *gin.Context){
 		return
 	}
 
+	var  x models.Group;
+	db.Db.Where("id=?",groupID).Find(&x);
 var member_group models.MemberGroup;
 db.Db.Where("group_id=?",groupID).Find(&member_group);
 
@@ -970,6 +972,7 @@ c.JSON(http.StatusOK, gin.H{
 	"message": "Successfully fetched",
 	"Admin_name":user.Name,
 	"Admin_email":user.Email,
+	"CreatedAt": x.CreatedAt,
 
 })
 
@@ -1128,6 +1131,93 @@ func DeleteMember(c *gin.Context) {
 	})
 }
 
+
+
+
+func Member_One_One(c *gin.Context) {
+	email := c.Query("email")
+
+	var member models.User
+	db.Db.Unscoped().Where("email=?", email).Find(&member)
+
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user not found"})
+		return
+	}
+
+	userModel, ok := user.(models.User)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "user type assertion failed"})
+		return
+	}
+
+	var deb []models.DebtTrack
+	db.Db.Unscoped().Where("(given_by_id=? AND own_by_id=?) OR (given_by_id=? AND own_by_id=?)", userModel.ID, member.ID, member.ID, userModel.ID).Find(&deb)
+
+
+
+
+	
+	var overalls []models.One_to_One
+	for _, x := range deb {
+		var overall models.One_to_One
+		if x.OwnById == userModel.ID {
+			overall.Amount = int64(x.Amount) * -1
+		} else {
+			overall.Amount = int64(x.Amount)
+		}
+
+		var expense models.Expense_db
+		db.Db.Unscoped().Where("id=?", x.ExpenseId).Find(&expense)
+
+		var group models.Group
+		db.Db.Unscoped().Where("id=?", expense.GroupId).Find(&group)
+
+		overall.Category = expense.Category
+		overall.GroupName = group.Name
+		overall.CreatedAt = expense.CreatedAt
+		overall.DeletedAt = x.DeletedAt
+		overall.Description = expense.Description
+
+		overalls = append(overalls, overall);
+
+
+
+
+
+
+	}
+	var totalAmountOwed uint64
+	err := db.Db.Model(&models.DebtTrack{}).
+		Where("own_by_id = ? AND given_by_id=?", userModel.ID,member.ID).
+		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 is returned if the sum is NULL
+		Scan(&totalAmountOwed).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount owed"})
+		return
+	}
+
+	var totalAmountLent uint64
+	err = db.Db.Model(&models.DebtTrack{}).
+		Where("given_by_id = ? AND own_by_id = ? ", userModel.ID,member.ID).
+		Select("COALESCE(SUM(amount), 0)"). // Ensure 0 is returned if the sum is NULL
+		Scan(&totalAmountLent).Error
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "problem in query total amount lent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Successfully deleted",
+		"total_amount_lent": totalAmountLent,
+		"total_amount_owed" :totalAmountOwed,
+		"overalls":overalls,
+
+	})
+}
 
 
 

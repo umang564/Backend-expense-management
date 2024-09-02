@@ -34,6 +34,7 @@ func Routes(router *gin.Engine) {
 		userGroup.GET("/admindetails",handler.AdminDetails)
 		userGroup.GET("/overallexpense",handler.OverallExpense)
 		userGroup.DELETE("/deletemember",handler.DeleteMember)
+		userGroup.GET("/oneone",handler.Member_One_One)
 	}
 
 	authGroup := router.Group("/auth")

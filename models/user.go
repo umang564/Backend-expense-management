@@ -48,7 +48,18 @@ Time  gorm.DeletedAt `gorm:"index"`
 
 
 
+			type One_to_One struct{
+				
 
+				Amount   int64  `gorm:"not null"`
+				GroupName  string         `gorm:"size:100;not null"`
+			    Category     string         `gorm:"size:200;not null"`
+				Description string         `gorm:"size:200;not null"`
+				CreatedAt   time.Time      `gorm:"autoCreateTime"`
+				DeletedAt   gorm.DeletedAt `gorm:"index"`
+			
+			
+			}
 
 
 
@@ -108,6 +119,11 @@ type Group_Details struct {
 	Description string `gorm:"size:200;not null"`
 	CreatedAt   time.Time      `gorm:"autoCreateTime"`
 }
+
+
+
+
+
 
 type Response_Group struct {
 	ID      uint   `gorm:"primaryKey;autoIncrement"`
